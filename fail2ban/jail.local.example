@@ -1,0 +1,29 @@
+[DEFAULT]
+bantime  = 4h
+findtime = 10m
+maxretry = 5
+bantime.increment = true
+bantime.factor = 2
+bantime.maxtime = 4w
+ignoreip = 127.0.0.1/8 10.0.0.0/24
+
+[sshd]
+enabled = true
+maxretry = 3
+bantime = 24h
+
+[nginx-badscan]
+enabled = true
+filter = nginx-badscan
+logpath = /var/log/nginx/access.log
+maxretry = 3
+findtime = 10m
+bantime = 7d
+
+[wordpress-xmlrpc]
+enabled = true
+filter = wordpress-xmlrpc
+logpath = /var/log/nginx/*access.log
+maxretry = 1
+findtime = 10m
+bantime = 24h

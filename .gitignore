@@ -1,0 +1,7 @@
+*.log
+*.pem
+*.key
+*.crt
+.env
+secrets.*
+production/
