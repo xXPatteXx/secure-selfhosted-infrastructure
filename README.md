@@ -1,208 +1,161 @@
 # Secure Self-Hosted Infrastructure
 
-This repository documents a hardened self-hosted web infrastructure based on a reverse proxy architecture with centralized security controls.
+This repository documents a hardened self-hosted web infrastructure built around a central nginx reverse proxy, isolated backend servers and layered access controls.
 
-The configuration is intentionally sanitized and designed as a reference implementation. It demonstrates patterns, concepts and example configurations without exposing real domains, IP addresses or credentials.
+The configuration is intentionally sanitized. It reflects a real environment and its evolution, while keeping domains, addresses, credentials and other operational details generic.
 
----
+## Current design
 
-## Problem Statement
-
-Many self-hosted environments are compromised due to avoidable issues such as:
-
-* Publicly exposed administrative interfaces
-* Missing network isolation
-* Insufficient firewall restrictions
-* Lack of monitoring and reactive controls
-
-These issues are typically the result of architectural decisions rather than complex exploits.
-
----
-
-## Approach
-
-This project provides a practical baseline for a secure setup with the following characteristics:
-
-* Single public entry point via reverse proxy
-* Backend systems isolated in an internal network
-* HTTP/HTTPS access restricted to trusted edge sources (e.g. Cloudflare)
-* Early request filtering at proxy level
-* Automated TLS certificate management via Let's Encrypt / Certbot
-* Centralized logging and monitoring
-* Automated blocking of malicious activity via Fail2Ban
-
----
-
-## Architecture
-
-```
-Client
-  ↓ HTTPS
-Trusted Edge (e.g. Cloudflare)
-  ↓ HTTP/HTTPS
+```text
+Internet
+  ↓
+Trusted Edge / CDN
+  ↓
+Gateway / Firewall
+  ↓
 Reverse Proxy (nginx)
-  ↓ Internal Network
-Backend Web Servers
+  ↓
+Isolated Backend Network
+  ├── Web Backend A
+  ├── Web Backend B
+  └── Web Backend C
 ```
 
----
+The reverse proxy is the only system allowed to reach the backend web services directly. Administrative access follows explicitly defined management paths instead of unrestricted routing between client and server networks.
 
-## Security Model
+Backend systems can establish controlled outbound connections for operating-system updates, DNS and certificate-related operations without becoming reachable from the public internet.
 
-The system is designed using a layered approach.
+## What this project focuses on
 
-### Network Level
+- Single public web entry point via nginx
+- Backend systems separated from client and public networks
+- Default-deny inbound firewall policies
+- Backend HTTP reachable only from the reverse proxy
+- Explicit administrative access paths
+- Controlled outbound connectivity for maintenance and updates
+- TLS termination and certificate management via Let's Encrypt / Certbot
+- Central security headers and request filtering
+- Domain-specific logging
+- Fail2Ban for repeated malicious activity
+- Validation of the complete request path after infrastructure changes
 
-* Default deny inbound policy
-* HTTP/HTTPS access limited to trusted edge IP ranges
-* SSH and monitoring restricted to internal networks
-* Backend systems are not directly exposed
+## Architecture evolution
 
-### Reverse Proxy Level
+The project started as a conventional reverse-proxy setup with backends on a shared internal network. It has since moved toward stronger segmentation:
 
-* Unknown hosts are dropped using catch-all configurations
-* Common probe and exploit paths are blocked before backend routing
-* Security headers are applied centrally
-* Administrative endpoints are restricted
+1. Backend systems were moved into a dedicated internal network.
+2. Direct backend exposure was removed and firewall rules were narrowed to the reverse proxy.
+3. Administrative access was separated from normal client-to-server routing.
+4. Network isolation was introduced between client and backend networks.
+5. Backend outbound routing and DNS were added specifically for maintenance tasks such as `apt update` and `apt upgrade`.
+6. The resulting design was verified from the backend, proxy and public edge perspectives.
 
-### Application Level
+This is an incremental hardening process rather than a claim of a perfectly isolated or final architecture. Some transitional components may remain until the network is moved to dedicated VLANs and gateway-managed routing.
 
-* No public administrative access
-* XML-RPC and enumeration endpoints are disabled or filtered
-* Application servers operate behind the proxy boundary
+## Security model
 
-### Reactive Controls
+### Network level
 
-* Fail2Ban monitors logs and applies bans on repeated suspicious activity
-* Escalation mechanisms increase ban duration for repeat offenders
+- Default deny for inbound connections
+- Public web traffic terminates at the reverse proxy
+- Backend web ports accept traffic only from the proxy
+- Client and backend networks are isolated
+- Management access uses explicitly defined paths
+- Outbound backend access is allowed where required for maintenance
 
----
+### Reverse proxy level
 
-## Monitoring and Logging
+- Unknown hosts are dropped with catch-all virtual hosts
+- HTTP is redirected to HTTPS
+- Security headers are applied centrally
+- Common probe and leak paths are blocked before backend routing
+- Per-domain access and error logs are maintained
 
-The setup includes a minimal but practical monitoring baseline:
+### Backend level
 
-* System metrics (CPU, memory, disk, network)
-* nginx request and status metrics
-* Fail2Ban status and activity
-* Structured access and error logs
+- Application servers are not publicly exposed
+- Backends serve only the application content required by the proxy
+- Administrative interfaces are not published to the internet
+- Operating-system updates remain possible through controlled outbound routing
 
-Monitoring is intended to remain internal or use outbound connections only.
+### Reactive controls
 
----
+- Fail2Ban monitors nginx and SSH activity
+- Repeated suspicious requests can be blocked automatically
+- Ban durations can be increased for repeat offenders
 
-## Repository Structure
+## Validation approach
 
+Changes are considered complete only after the relevant layers have been tested.
+
+Typical checks include:
+
+```bash
+# Backend network state
+ip route
+resolvectl status
+sudo ufw status verbose
+
+# Reverse proxy
+sudo nginx -t
+sudo systemctl --failed
+sudo fail2ban-client ping
+
+# Proxy to backend
+curl -I -H "Host: example.com" http://backend.example.internal
+
+# Public path
+curl -I https://example.com
 ```
+
+Expected behavior:
+
+```text
+Public client → edge → reverse proxy → backend     allowed
+Reverse proxy → backend HTTP                       allowed
+Client network → backend directly                  blocked
+Backend → another backend HTTP                     blocked
+Backend → internet for updates/DNS                 allowed
+Internet → backend directly                        blocked
+```
+
+## Repository structure
+
+```text
 .
-├── docs/        Documentation of architecture and concepts
-├── nginx/       Reverse proxy and security configuration
-├── fail2ban/    Jails and filters
-├── scripts/     Operational helper scripts
+├── docs/        Architecture, networking and security notes
+├── nginx/       Reverse proxy and shared security snippets
+├── fail2ban/    Example jails and filters
+└── scripts/     Operational helper scripts
 ```
 
----
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Networking](docs/networking.md)
+- [Security model](docs/security-model.md)
+- [Monitoring and logging](docs/monitoring-logging.md)
+- [TLS and Certbot](docs/tls-certbot.md)
 
 ## Usage
 
-This repository is intended as a reference and starting point.
+This repository is a reference and starting point, not a drop-in production configuration.
 
-Before applying any configuration:
+Before applying any example:
 
-1. Replace placeholders such as domain names and network ranges
-2. Adjust firewall rules and trusted source definitions
-3. Validate nginx configuration before deployment
-4. Verify certificate handling with a dry run
-5. Test monitoring and blocking behavior under real conditions
+1. Replace placeholder domains, addresses and networks.
+2. Adapt firewall rules to the real trust boundaries.
+3. Confirm that management access remains available before applying network changes.
+4. Validate nginx with `nginx -t`.
+5. Test certificate renewal with `certbot renew --dry-run`.
+6. Verify both allowed and intentionally blocked traffic paths.
 
----
+## Current direction
 
-## Production Readiness Checklist
+The present design uses a dedicated backend segment and explicit management paths. The next logical step is moving the transitional routing components to native VLANs and gateway-managed firewall rules while keeping the same security boundaries.
 
-Before using this setup in a production environment, verify the following points.
+The goal is not maximum complexity. The goal is a small, understandable infrastructure where every allowed path has a reason to exist.
 
-### Configuration
+## License
 
-* All placeholder values have been replaced
-* Firewall rules are adapted to the actual environment
-* Trusted edge IP ranges are up to date
-
-### Network and Access Control
-
-* Direct access to the origin server is not possible from the public internet
-* HTTP/HTTPS access is restricted to trusted edge sources
-* SSH access is limited to trusted internal networks
-* Monitoring endpoints are not publicly exposed
-
-### Reverse Proxy
-
-* nginx configuration is valid:
-
-  ```
-  nginx -t
-  ```
-* Unknown hosts are correctly dropped
-* Security headers are applied as expected
-* Probe and exploit paths are blocked before backend routing
-
-### TLS and Certificates
-
-* Certificates are issued for all active domains
-* Automatic renewal is configured and active
-* Renewal test succeeds:
-
-  ```
-  certbot renew --dry-run
-  ```
-
-### Application Exposure
-
-* Administrative interfaces are not publicly accessible
-* XML-RPC and unnecessary endpoints are disabled or filtered
-* Backend services are only reachable through the reverse proxy
-
-### Monitoring and Logging
-
-* Access and error logs are written and accessible
-* Log format provides sufficient detail for analysis
-* Monitoring is internal-only or outbound-based
-* No sensitive log data is exposed externally
-
-### Reactive Protection
-
-* Fail2Ban is active and monitoring relevant logs
-* Jails are correctly configured and enabled
-* Suspicious activity results in bans
-* Repeat offenders are escalated
-
-### Validation Under Real Conditions
-
-* Requests follow the intended path:
-
-  ```
-  Client → Trusted Edge → Reverse Proxy → Backend
-  ```
-* Direct origin access attempts are blocked
-* Common attack patterns are visible in logs
-* Automated blocking is triggered as expected
-
----
-
-## Important Notes
-
-* This is not a drop-in production configuration
-* All values must be adapted to the target environment
-* Sensitive operational data must never be published
-
----
-
-## Goal
-
-The goal of this project is to provide a practical and maintainable baseline for secure self-hosted web infrastructure by focusing on:
-
-* Reduced attack surface
-* Controlled access paths
-* Consistent monitoring
-* Automated response to malicious activity
-
-Security is achieved through the combination of these measures rather than a single component.
+MIT
