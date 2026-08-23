@@ -146,6 +146,7 @@ Unknown hostname → reverse proxy                   rejected
 - [Security model](docs/security-model.md)
 - [Monitoring and logging](docs/monitoring-logging.md)
 - [TLS and Certbot](docs/tls-certbot.md)
+- [nginx deployment notes](docs/nginx-deployment.md)
 
 ## Usage
 
