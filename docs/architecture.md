@@ -28,11 +28,18 @@ The design has evolved from a shared internal network toward explicit segmentati
 Responsibilities:
 
 - Accept HTTP/HTTPS requests
-- Terminate TLS
-- Apply security headers and probe blocking
+- Reject unknown hostnames with catch-all default servers
+- Terminate TLS for known sites
+- Apply application-safe shared security headers and probe blocking
 - Route valid requests to internal backends
 - Maintain per-domain access and error logs
-- Preserve original client information from the trusted edge where possible
+- Restore original client information only from explicitly trusted edge networks
+
+The repository separates three concerns:
+
+- `nginx/default-deny.conf` handles unknown hostnames
+- `nginx/http-context-example.conf` defines the shared log format and trusted real-IP example
+- `nginx/reverse-proxy-example.conf` contains the application vHost
 
 ### Backend Servers
 
@@ -56,9 +63,12 @@ Responsibilities:
 
 Responsibilities:
 
-- Public DNS and edge proxying
+- Public DNS and edge proxying where used
 - Optional WAF and rate limiting
 - Hide the origin from normal public access paths
+- Forward client information using a documented header
+
+Forwarded client-IP headers are not trusted on their own. nginx must accept them only when the TCP peer belongs to an explicitly configured trusted edge network.
 
 ## Management access
 
@@ -74,7 +84,7 @@ This keeps the client network and backend network isolated while still allowing 
 - Backend HTTP only from the proxy
 - Explicit management paths
 - Controlled outbound maintenance traffic
-- Centralized security on the proxy
+- Centralized proxy controls without pretending every policy is application-independent
 - Separate logs per project/domain
 - Incremental hardening without unnecessary complexity
 
