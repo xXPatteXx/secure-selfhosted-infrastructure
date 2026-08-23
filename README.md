@@ -23,7 +23,7 @@ Isolated Backend Network
 
 The reverse proxy is the only system allowed to reach the backend web services directly. Administrative access follows explicitly defined management paths instead of unrestricted routing between client and server networks.
 
-Backend systems can establish controlled outbound connections for operating-system updates, DNS and certificate-related operations without becoming reachable from the public internet.
+Backend systems can establish controlled outbound connections for operating-system updates and DNS without becoming reachable from the public internet.
 
 ## What this project focuses on
 
@@ -34,9 +34,11 @@ Backend systems can establish controlled outbound connections for operating-syst
 - Explicit administrative access paths
 - Controlled outbound connectivity for maintenance and updates
 - TLS termination and certificate management via Let's Encrypt / Certbot
+- Catch-all rejection of unknown hostnames
+- Trusted client-address restoration when a known edge/CDN is used
 - Central security headers and request filtering
 - Domain-specific logging
-- Fail2Ban for repeated malicious activity
+- Fail2Ban examples for SSH and suspicious web traffic
 - Validation of the complete request path after infrastructure changes
 
 ## Architecture evolution
@@ -65,11 +67,13 @@ This is an incremental hardening process rather than a claim of a perfectly isol
 
 ### Reverse proxy level
 
-- Unknown hosts are dropped with catch-all virtual hosts
-- HTTP is redirected to HTTPS
-- Security headers are applied centrally
+- Unknown hosts are rejected by dedicated default servers
+- HTTP is redirected to HTTPS for known sites
+- Security headers are applied centrally where they are application-safe
+- Content Security Policy is configured per application rather than globally
 - Common probe and leak paths are blocked before backend routing
 - Per-domain access and error logs are maintained
+- Forwarded client addresses are trusted only from explicitly configured edge networks
 
 ### Backend level
 
@@ -80,9 +84,10 @@ This is an incremental hardening process rather than a claim of a perfectly isol
 
 ### Reactive controls
 
-- Fail2Ban monitors nginx and SSH activity
-- Repeated suspicious requests can be blocked automatically
-- Ban durations can be increased for repeat offenders
+- Fail2Ban monitors SSH activity with a normal local jail example
+- Example nginx jails are included for repeated suspicious requests
+- Web jails are disabled by default until the ban action has been matched to the actual ingress path
+- When traffic arrives through a CDN/edge, provider-side blocking may be required because a local firewall only sees the edge connection
 
 ## Validation approach
 
@@ -117,16 +122,21 @@ Client network → backend directly                  blocked
 Backend → another backend HTTP                     blocked
 Backend → internet for updates/DNS                 allowed
 Internet → backend directly                        blocked
+Unknown hostname → reverse proxy                   rejected
 ```
 
 ## Repository structure
 
 ```text
 .
-├── docs/        Architecture, networking and security notes
-├── nginx/       Reverse proxy and shared security snippets
-├── fail2ban/    Example jails and filters
-└── scripts/     Operational helper scripts
+├── docs/                         Architecture, networking and security notes
+├── nginx/
+│   ├── default-deny.conf         Catch-all HTTP/HTTPS rejection
+│   ├── http-context-example.conf Logging and trusted real-IP example
+│   ├── reverse-proxy-example.conf
+│   └── snippets/                 Shared request filtering and safe headers
+├── fail2ban/                     Example jails and filters
+└── scripts/                      Operational helper scripts
 ```
 
 ## Documentation
@@ -141,14 +151,20 @@ Internet → backend directly                        blocked
 
 This repository is a reference and starting point, not a drop-in production configuration.
 
+The nginx vHost example targets nginx 1.25.1+ and uses the current `http2 on;` directive.
+
 Before applying any example:
 
 1. Replace placeholder domains, addresses and networks.
 2. Adapt firewall rules to the real trust boundaries.
-3. Confirm that management access remains available before applying network changes.
-4. Validate nginx with `nginx -t`.
-5. Test certificate renewal with `certbot renew --dry-run`.
-6. Verify both allowed and intentionally blocked traffic paths.
+3. Install the catch-all default servers and remove conflicting distribution defaults.
+4. Define the `main` log format in the nginx `http {}` context.
+5. If a trusted edge/CDN is used, replace the documentation-only real-IP ranges and header with the provider's current values. Never trust forwarded client-IP headers from arbitrary sources.
+6. Confirm that management access remains available before applying network changes.
+7. Validate nginx with `nginx -t`.
+8. Test certificate renewal with `certbot renew --dry-run`.
+9. Verify both allowed and intentionally blocked traffic paths.
+10. Enable web-facing Fail2Ban jails only after testing a ban action that is effective for the actual ingress path.
 
 ## Current direction
 
