@@ -24,7 +24,7 @@ sudo fail2ban-client status
 
 ## nginx log format
 
-A useful log format includes the client address, request, response status, request time and forwarding information.
+The repository provides the `main` log format in `nginx/http-context-example.conf`. It includes the resolved client address, request, response status, request time and forwarding information.
 
 ```nginx
 log_format main '$remote_addr - $remote_user [$time_local] '
@@ -36,17 +36,19 @@ log_format main '$remote_addr - $remote_user [$time_local] '
 
 Per-domain logs make troubleshooting and Fail2Ban filtering easier in a multi-site setup.
 
+When nginx is behind a trusted edge/CDN, configure the real-IP module before relying on `$remote_addr` as the visitor address. Trust forwarded client-IP headers only from explicitly configured edge source ranges. After correct processing, `$remote_addr` is the restored visitor address and `$realip_remote_addr` remains the original TCP peer.
+
 ## Useful log commands
 
 ```bash
-# Live traffic
-sudo tail -f /var/log/nginx/access.log
+# Live traffic from all per-domain access logs
+sudo tail -f /var/log/nginx/*access.log
 
 # Common probes and leak attempts
-sudo grep -E "\.git|\.env|backup|dump|xmlrpc|wp-login" /var/log/nginx/access.log
+sudo grep -Eh "\.git|\.env|backup|dump|xmlrpc|wp-login|wp-config|phpinfo|vendor/" /var/log/nginx/*access.log
 
-# Top client IPs
-sudo awk '{print $1}' /var/log/nginx/access.log | sort | uniq -c | sort -nr | head
+# Top client IPs across all per-domain logs
+sudo awk '{print $1}' /var/log/nginx/*access.log | sort | uniq -c | sort -nr | head
 
 # Fail2Ban status
 sudo fail2ban-client status
@@ -54,6 +56,10 @@ sudo fail2ban-client status nginx-badscan
 ```
 
 References to WordPress-related paths in log searches are retained because scanners continue to request them even when WordPress is not installed.
+
+## Fail2Ban and edge proxies
+
+A log entry can contain the real visitor IP even though the network connection itself comes from a CDN/edge. In that layout, a normal local firewall ban of the restored visitor IP may not block future requests. Web jails are therefore disabled in the example until an ingress-appropriate local or provider-side action has been configured and tested.
 
 ## Functional validation
 
