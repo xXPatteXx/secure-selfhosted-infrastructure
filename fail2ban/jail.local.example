@@ -5,23 +5,32 @@ maxretry = 5
 bantime.increment = true
 bantime.factor = 2
 bantime.maxtime = 4w
-ignoreip = 127.0.0.1/8 10.0.0.0/24
+ignoreip = 127.0.0.1/8 ::1
+
+# Add management networks only after verifying the exact source ranges.
+# Do not copy broad internal networks into ignoreip by default.
 
 [sshd]
 enabled = true
 maxretry = 3
 bantime = 24h
 
+# Web jails are disabled by default because the correct ban action depends on
+# the ingress path. If nginx sits behind a CDN/edge, a local firewall ban of a
+# reconstructed visitor IP may not block traffic that physically arrives from
+# the edge. Enable these jails only after selecting and testing an appropriate
+# local or provider-side action.
+
 [nginx-badscan]
-enabled = true
+enabled = false
 filter = nginx-badscan
-logpath = /var/log/nginx/access.log
+logpath = /var/log/nginx/*access.log
 maxretry = 3
 findtime = 10m
 bantime = 7d
 
 [wordpress-xmlrpc]
-enabled = true
+enabled = false
 filter = wordpress-xmlrpc
 logpath = /var/log/nginx/*access.log
 maxretry = 1
