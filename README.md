@@ -80,22 +80,6 @@ Backend systems can establish controlled outbound connections for operating-syst
 | Management path | Backend systems | Allowed | Administration |
 | Backend | DNS / Internet | Restricted | Updates and maintenance |
 
-## What this project focuses on
-
-- Single public web entry point via nginx
-- Backend systems separated from client and public networks
-- Default-deny inbound firewall policies
-- Backend HTTP reachable only from the reverse proxy
-- Explicit administrative access paths
-- Controlled outbound connectivity for maintenance and updates
-- TLS termination and certificate management via Let's Encrypt / Certbot
-- Catch-all rejection of unknown hostnames
-- Trusted client-address restoration when a known edge/CDN is used
-- Central security headers and request filtering
-- Domain-specific logging
-- Fail2Ban examples for SSH and suspicious web traffic
-- Validation of the complete request path after infrastructure changes
-
 ## Architecture evolution
 
 The project started as a conventional reverse-proxy setup with backends on a shared internal network. It has since moved toward stronger segmentation:
@@ -145,29 +129,9 @@ The change included:
 
 ### Validation
 
-The infrastructure was tested from multiple perspectives after the change.
+The change was validated from the backend, reverse-proxy and public-client perspectives.
 
-Examples:
-
-```bash
-# Backend network state
-ip route
-resolvectl status
-sudo ufw status verbose
-
-# Reverse proxy
-sudo nginx -t
-sudo systemctl --failed
-sudo fail2ban-client ping
-
-# Proxy to backend
-curl -I -H "Host: example.com" http://backend.example.internal
-
-# Public path
-curl -I https://example.com
-```
-
-Both permitted and intentionally blocked communication paths were verified.
+Both required and intentionally blocked communication paths were tested. The detailed validation procedure is documented in [Validation approach](#validation-approach).
 
 ### Result
 
@@ -237,13 +201,14 @@ curl -I https://example.com
 Expected behavior:
 
 ```text
-Public client → edge → reverse proxy → backend     allowed
-Reverse proxy → backend HTTP                       allowed
-Client network → backend directly                  blocked
-Backend → another backend HTTP                     blocked
-Backend → internet for updates/DNS                 allowed
-Internet → backend directly                        blocked
-Unknown hostname → reverse proxy                   rejected
+Public client → edge → gateway → reverse proxy → backend    allowed
+Reverse proxy → backend HTTP                                allowed
+Client network → backend directly                           blocked
+Backend → another backend HTTP                              blocked
+Backend → internet                                          blocked by default
+Backend → required DNS/update services                      allowed
+Internet → backend directly                                 blocked
+Unknown hostname → reverse proxy                            rejected
 ```
 
 ## Repository structure
